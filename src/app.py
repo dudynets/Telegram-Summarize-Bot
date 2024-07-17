@@ -1,4 +1,4 @@
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 from telegram import Update
 from dotenv import load_dotenv
 import os
@@ -14,7 +14,7 @@ logging.basicConfig(format='\n%(asctime)s - %(name)s - %(levelname)s - %(message
 logger = logging.getLogger(__name__)
 
 
-def message_handler(update: Update, context: CallbackContext):
+async def message_handler(update: Update, context: CallbackContext) -> None:
     """
     Save the message to the chat history.
     
@@ -28,7 +28,7 @@ def message_handler(update: Update, context: CallbackContext):
     save_message(message, is_edited)
 
 
-def summarize_handler(update: Update, context: CallbackContext):
+async def summarize_handler(update: Update, context: CallbackContext) -> None:
     """
     Generate a summary of the chat history.
 
@@ -38,7 +38,7 @@ def summarize_handler(update: Update, context: CallbackContext):
     """
 
     if not update.message.reply_to_message:
-        update.message.reply_text("Please reply to a message with the /summarize command to get a brief summary of the messages sent after it.")
+        await update.message.reply_text("Please reply to a message with the /summarize command to get a brief summary of the messages sent after it.")
         return
     
     chat_id = update.message.chat_id
@@ -48,20 +48,20 @@ def summarize_handler(update: Update, context: CallbackContext):
         messages = get_chat_history(chat_id, from_message_id)
 
         if not messages or len(messages) == 0:
-            update.message.reply_text("No messages found to summarize. Most likely bot was just added to the chat.")
+            await update.message.reply_text("No messages found to summarize. Most likely bot was just added to the chat.")
             return
         
     except Exception:
-        update.message.reply_text("Something went wrong while trying to retrieve the chat history.")
+        await update.message.reply_text("Something went wrong while trying to retrieve the chat history.")
         logger.exception("Error while trying to retrieve the chat history.")
         return
 
-    response_message = update.message.reply_text("Generating summary... Please wait.")
+    response_message = await update.message.reply_text("Generating summary... Please wait.")
     summary_generator = summarize(messages)
 
     for partial_response in summary_generator:
         try:
-            response_message.edit_text(partial_response)
+            await response_message.edit_text(partial_response)
         except Exception:
             pass
 
@@ -80,15 +80,13 @@ def error_handler(update: Update, context: CallbackContext):
 def main():
     load_dotenv()
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-    updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    dp = updater.dispatcher
-    dp.add_handler(MessageHandler(Filters.text & (~Filters.command), message_handler))
-    dp.add_handler(CommandHandler("summarize", summarize_handler))
-    dp.add_error_handler(error_handler)
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message_handler))
+    app.add_handler(CommandHandler("summarize", summarize_handler))
+    app.add_error_handler(error_handler)
 
-    updater.start_polling()
-    updater.idle()
+    app.run_polling()
 
 if __name__ == '__main__':
     main()
